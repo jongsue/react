@@ -1,13 +1,12 @@
 import { pxToRem } from '../../../../lib'
 
 export interface ButtonVariables {
-  [key: string]: string | number
-
   height: string
   minWidth: string
   maxWidth: string
   borderRadius: string
   circularRadius: string
+  fontWeight: number
   paddingLeftRightValue: number
 
   color: string
