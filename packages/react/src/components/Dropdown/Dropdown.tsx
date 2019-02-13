@@ -53,6 +53,9 @@ export interface DropdownProps extends UIComponentProps<DropdownProps, DropdownS
   /** The index of the currently active selected item, if dropdown has a multiple selection. */
   activeSelectedIndex?: number
 
+  /** A dropdown can have its trigger autofocused. */
+  autofocus?: boolean
+
   /** A dropdown can be clearable and let users remove their selection. */
   clearable?: boolean
 
@@ -128,6 +131,9 @@ export interface DropdownProps extends UIComponentProps<DropdownProps, DropdownS
    */
   onSelectedChange?: ComponentEventHandler<DropdownProps>
 
+  /** Whether or not the menu should open when the dropdown is focused. */
+  openOnFocus?: boolean
+
   /** A placeholder message for the input field. */
   placeholder?: string
 
@@ -188,11 +194,10 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
   private inputRef = React.createRef<HTMLInputElement>()
   private listRef = React.createRef<HTMLElement>()
   private selectedItemsRef = React.createRef<HTMLDivElement>()
+  private focusEnabled = true
 
   static displayName = 'Dropdown'
-
   static className = 'ui-dropdown'
-
   static slotClassNames: DropdownSlotClassNames
 
   static propTypes = {
@@ -201,6 +206,7 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
       content: false,
     }),
     activeSelectedIndex: PropTypes.number,
+    autofocus: PropTypes.bool,
     clearable: PropTypes.bool,
     clearIndicator: customPropTypes.itemShorthand,
     defaultActiveSelectedIndex: PropTypes.number,
@@ -221,6 +227,7 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
     noResultsMessage: customPropTypes.itemShorthand,
     onSearchQueryChange: PropTypes.func,
     onSelectedChange: PropTypes.func,
+    openOnFocus: PropTypes.bool,
     placeholder: PropTypes.string,
     renderItem: PropTypes.func,
     renderSelectedItem: PropTypes.func,
@@ -267,6 +274,13 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
     }
   }
 
+  componentDidMount() {
+    if (this.props.autofocus) {
+      this.tryFocusSearchInput()
+      this.tryFocusTriggerButton()
+    }
+  }
+
   public renderComponent({
     ElementType,
     classes,
@@ -305,6 +319,7 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
             getRootProps,
             getToggleButtonProps,
             isOpen,
+            openMenu,
             toggleMenu,
             highlightedIndex,
             selectItemAtIndex,
@@ -332,10 +347,11 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
                           rtl,
                           highlightedIndex,
                           getInputProps,
+                          openMenu,
                           selectItemAtIndex,
                           variables,
                         )
-                      : this.renderTriggerButton(styles, rtl, getToggleButtonProps)}
+                      : this.renderTriggerButton(styles, rtl, getToggleButtonProps, openMenu)}
                   </div>
                   {showClearIndicator
                     ? Icon.create(clearIndicator, {
@@ -387,6 +403,7 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
     styles: ComponentSlotStylesInput,
     rtl: boolean,
     getToggleButtonProps: (options?: GetToggleButtonPropsOptions) => any,
+    openMenu: () => void,
   ): JSX.Element {
     const { triggerButton } = this.props
     const content = this.getSelectedItemAsString(this.state.value)
@@ -400,8 +417,11 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
             fluid: true,
             styles: styles.triggerButton,
             ...getToggleButtonProps({
-              onFocus: () => {
+              onFocus: (e: React.SyntheticEvent) => {
                 this.setState({ focused: true })
+                this.openMenuOnFocus(openMenu)
+                this.focusEnabled = true
+                console.log('onFocus focusEnabled: ', this.focusEnabled)
               },
               onBlur: () => {
                 this.setState({ focused: false })
@@ -422,6 +442,7 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
     rtl: boolean,
     highlightedIndex: number,
     getInputProps: (options?: GetInputPropsOptions) => any,
+    openMenu: () => void,
     selectItemAtIndex: (
       index: number,
       otherStateToSet?: Partial<StateChangeOptions<any>>,
@@ -446,10 +467,11 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
         this.handleSearchInputOverrides(
           predefinedProps,
           highlightedIndex,
+          getInputProps,
+          openMenu,
           rtl,
           selectItemAtIndex,
           accessibilityComboboxProps,
-          getInputProps,
         ),
     })
   }
@@ -683,6 +705,8 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
   private handleSearchInputOverrides = (
     predefinedProps: DropdownSearchInputProps,
     highlightedIndex: number,
+    getInputProps: (options?: GetInputPropsOptions) => any,
+    openMenu: () => void,
     rtl: boolean,
     selectItemAtIndex: (
       index: number,
@@ -690,7 +714,6 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
       cb?: () => void,
     ) => void,
     accessibilityComboboxProps: Object,
-    getInputProps: (options?: GetInputPropsOptions) => any,
   ) => {
     const handleInputBlur = (
       e: React.SyntheticEvent,
@@ -751,8 +774,10 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
       accessibilityComboboxProps,
       onFocus: (e: React.SyntheticEvent, searchInputProps: DropdownSearchInputProps) => {
         this.setState({ focused: true })
-
+        this.openMenuOnFocus(openMenu)
         _.invoke(predefinedProps, 'onFocus', e, searchInputProps)
+        this.focusEnabled = true
+        console.log('onFocus focusEnabled: ', this.focusEnabled)
       },
       onInputBlur: (e: React.SyntheticEvent, searchInputProps: DropdownSearchInputProps) => {
         handleInputBlur(e, searchInputProps)
@@ -913,10 +938,9 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
             })
             if (this.props.search) {
               e.preventDefault() // prevents caret to forward one position in input.
-              this.inputRef.current.focus()
-            } else {
-              this.buttonRef.current.focus()
             }
+            this.tryFocusSearchInput()
+            this.tryFocusTriggerButton()
           }
         }
         break
@@ -965,13 +989,25 @@ class Dropdown extends AutoControlledComponent<Extendable<DropdownProps>, Dropdo
 
   private tryFocusTriggerButton = () => {
     if (!this.props.search) {
+      this.focusEnabled = false
+      console.log('tryFocusTriggerButton focusEnabled: ', this.focusEnabled)
       this.buttonRef.current.focus()
     }
   }
 
   private tryFocusSearchInput = () => {
     if (this.props.search) {
+      this.focusEnabled = false
+      console.log('tryFocusTriggerButton tryFocusSearchInput: ', this.focusEnabled)
       this.inputRef.current.focus()
+    }
+  }
+
+  private openMenuOnFocus = (openMenu: () => void) => {
+    console.log('openMenuOnFocus focusEnabled: ', this.focusEnabled)
+    if (this.props.openOnFocus && this.focusEnabled) {
+      console.log('openMenuOnFocus CALLS openMenu')
+      openMenu()
     }
   }
 
